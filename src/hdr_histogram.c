@@ -7,7 +7,11 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <math.h>
+
+#if defined (__i386) || defined (__amd64)
 #include <x86intrin.h>
+#endif
+
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>

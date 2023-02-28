@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 #include "script.h"
 #include "http_parser.h"
 #include "stats.h"
@@ -26,6 +27,10 @@ static int script_wrk_time_us(lua_State *);
 static void set_fields(lua_State *, int, const table_field *);
 static void set_field(lua_State *, int, char *, int);
 static int push_url_part(lua_State *, char *, struct http_parser_url *, enum http_parser_url_fields);
+
+#ifndef luaL_reg
+#define luaL_reg luaL_Reg
+#endif
 
 static const struct luaL_reg addrlib[] = {
     { "__tostring", script_addr_tostring   },
@@ -497,8 +502,8 @@ void script_copy_value(lua_State *src, lua_State *dst, int index) {
             lua_newtable(dst);
             lua_pushnil(src);
             while (lua_next(src, index - 1)) {
-                script_copy_value(src, dst, -1);
                 script_copy_value(src, dst, -2);
+                script_copy_value(src, dst, -1);
                 lua_settable(dst, -3);
                 lua_pop(src, 1);
             }

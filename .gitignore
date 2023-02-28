@@ -1,6 +1,13 @@
 *.o
+*.obj
+
 *.a
-wrk
+*.lib
+
+*.out
+*.exe
+
+wrk2
 
 deps/luajit/src/host/buildvm
 deps/luajit/src/host/buildvm_arch.h
@@ -16,3 +23,5 @@ deps/luajit/src/luajit
 
 .idea
 CMakeLists.txt
+
+*Output

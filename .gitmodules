@@ -1,0 +1,8 @@
+[submodule "deps/luajit"]
+	path = deps/luajit
+	url = https://github.com/LuaJIT/LuaJIT
+	branch = v2.1
+[submodule "deps/openssl"]
+	path = deps/openssl
+	url = https://github.com/openssl/openssl
+	branch = master

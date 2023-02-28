@@ -23,6 +23,10 @@ static struct config {
     bool     record_all_responses;
     char    *host;
     char    *script;
+    char    *ca;
+    char    *cert;
+    char    *key;
+    char    *ciphers;
     SSL_CTX *ctx;
 } cfg;
 
@@ -50,28 +54,38 @@ static void handler(int sig) {
 }
 
 static void usage() {
-    printf("Usage: wrk <options> <url>                            \n"
-           "  Options:                                            \n"
-           "    -c, --connections <N>  Connections to keep open   \n"
-           "    -d, --duration    <T>  Duration of test           \n"
-           "    -t, --threads     <N>  Number of threads to use   \n"
-           "                                                      \n"
-           "    -s, --script      <S>  Load Lua script file       \n"
-           "    -H, --header      <H>  Add header to request      \n"
-           "    -L  --latency          Print latency statistics   \n"
+    printf("Usage: wrk2 <options> <url>                                    \n"
+           "  Options:                                                     \n"
+           "                                                               \n"
+           "    -v, --version          Print version details               \n"
+           "    -h, --help             Print this help                     \n"
+           "                                                               \n"
+           "    -c, --connections <N>  Connections to keep open            \n"
+           "    -d, --duration    <T>  Duration of test                    \n"
+           "    -t, --threads     <N>  Number of threads to use            \n"
+           "                                                               \n"
+           "    -s, --script      <S>  Load Lua script file                \n"
+           "    -H, --header      <H>  Add header to request               \n"
+           "                                                               \n"
+           "    -L  --latency          Print latency statistics            \n"
            "    -U  --u_latency        Print uncorrected latency statistics\n"
-           "        --timeout     <T>  Socket/request timeout     \n"
-           "    -B, --batch_latency    Measure latency of whole   \n"
-           "                           batches of pipelined ops   \n"
-           "                           (as opposed to each op)    \n"
-           "    -v, --version          Print version details      \n"
-           "    -R, --rate        <T>  work rate (throughput)     \n"
-           "                           in requests/sec (total)    \n"
-           "                           [Required Parameter]       \n"
-           "                                                      \n"
-           "                                                      \n"
-           "  Numeric arguments may include a SI unit (1k, 1M, 1G)\n"
-           "  Time arguments may include a time unit (2s, 2m, 2h)\n");
+           "    -B, --batch_latency    Measure latency of whole            \n"
+           "                           batches of pipelined ops            \n"
+           "                           (as opposed to each op)             \n"
+           "                                                               \n"
+           "    -T, --timeout     <T>  Socket/request timeout              \n"
+           "    -R, --rate        <T>  work rate (throughput)              \n"
+           "                           in requests/sec (total)             \n"
+           "                           [Default 1000]                      \n"
+           "                                                               \n"
+           "    -A, --ca_cert     <S>  CA certificate file                 \n"
+           "    -C, --cert        <S>  Client certificate file             \n"
+           "    -K, --key         <S>  Client private key file             \n"
+           "    -z, --ciphers     <S>  SSL/TLS Ciphers                     \n"
+           "                                                               \n"
+           "  Numeric arguments may include a SI unit (1k, 1M, 1G)         \n"
+           "  Time arguments may include a time unit (2s, 2m, 2h)          \n"
+           "                                                               \n");
 }
 
 int main(int argc, char **argv) {
@@ -94,6 +108,23 @@ int main(int argc, char **argv) {
             ERR_print_errors_fp(stderr);
             exit(1);
         }
+
+        if (NULL != cfg.ca || NULL != cfg.cert || NULL != cfg.key) {
+            if (ssl_set_mutual_auth(cfg.ctx, cfg.ca, cfg.cert, cfg.key) == ERROR) {
+                fprintf(stderr, "unable to set Mutual Auth parameters\n");
+                ERR_print_errors_fp(stderr);
+                exit(1);
+            }
+        }
+
+        if (NULL != cfg.ciphers) {
+            if (ssl_set_cipher_list(cfg.ctx, cfg.ciphers) == ERROR) {
+                fprintf(stderr, "unable to set SSL ciphers: %s\n", cfg.ciphers);
+                ERR_print_errors_fp(stderr);
+                exit(1);
+            }
+        }
+
         sock.connect  = ssl_connect;
         sock.close    = ssl_close;
         sock.read     = ssl_read;
@@ -111,7 +142,6 @@ int main(int argc, char **argv) {
     thread *threads = zcalloc(cfg.threads * sizeof(thread));
 
     hdr_init(1, MAX_LATENCY, 3, &(statistics.requests->histogram));
-
 
     lua_State *L = script_create(cfg.script, url, headers);
     if (!script_resolve(L, host, service)) {
@@ -207,11 +237,10 @@ int main(int argc, char **argv) {
     print_stats_header();
     print_stats("Latency", latency_stats, format_time_us);
     print_stats("Req/Sec", statistics.requests, format_metric);
-//    if (cfg.latency) print_stats_latency(latency_stats);
 
     if (cfg.latency) {
         print_hdr_latency(latency_histogram,
-                "Recorded Latency");
+                "Recorded Latency HDR");
         printf("----------------------------------------------------------\n");
     }
 
@@ -526,20 +555,20 @@ static int response_complete(http_parser *parser) {
         printf("This wil never ever ever happen...");
         printf("But when it does. The following information will help in debugging");
         printf("response_complete:\n");
-        printf("  expected_latency_timing = %lld\n", expected_latency_timing);
-        printf("  now = %lld\n", now);
-        printf("  expected_latency_start = %lld\n", expected_latency_start);
-        printf("  c->thread_start = %lld\n", c->thread_start);
-        printf("  c->complete = %lld\n", c->complete);
+        printf("  expected_latency_timing = %lld\n", (long long int)expected_latency_timing);
+        printf("  now = %llu\n", (long long unsigned int)now);
+        printf("  expected_latency_start = %llu\n", (long long unsigned int)expected_latency_start);
+        printf("  c->thread_start = %llu\n", (long long unsigned int)c->thread_start);
+        printf("  c->complete = %llu\n", (long long unsigned int)c->complete);
         printf("  throughput = %g\n", c->throughput);
-        printf("  latest_should_send_time = %lld\n", c->latest_should_send_time);
-        printf("  latest_expected_start = %lld\n", c->latest_expected_start);
-        printf("  latest_connect = %lld\n", c->latest_connect);
-        printf("  latest_write = %lld\n", c->latest_write);
+        printf("  latest_should_send_time = %llu\n", (long long unsigned int)c->latest_should_send_time);
+        printf("  latest_expected_start = %llu\n", (long long unsigned int)c->latest_expected_start);
+        printf("  latest_connect = %llu\n", (long long unsigned int)c->latest_connect);
+        printf("  latest_write = %llu\n", (long long unsigned int)c->latest_write);
 
         expected_latency_start = c->thread_start +
                 ((c->complete ) / c->throughput);
-        printf("  next expected_latency_start = %lld\n", expected_latency_start);
+        printf("  next expected_latency_start = %llu\n", (long long unsigned int)expected_latency_start);
     }
 
     c->latest_should_send_time = 0;
@@ -577,6 +606,7 @@ static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
         case OK:    break;
         case ERROR: goto error;
         case RETRY: return;
+        case READ_EOF: goto error;
     }
 
     http_parser_init(&c->parser, HTTP_RESPONSE);
@@ -634,6 +664,7 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
         case OK:    break;
         case ERROR: goto error;
         case RETRY: return;
+        case READ_EOF: goto error;
     }
 
     c->written += n;
@@ -659,6 +690,7 @@ static void socket_readable(aeEventLoop *loop, int fd, void *data, int mask) {
             case OK:    break;
             case ERROR: goto error;
             case RETRY: return;
+            case READ_EOF: goto error;
         }
 
         if (http_parser_execute(&c->parser, &parser_settings, c->buf, n) != n) goto error;
@@ -692,6 +724,8 @@ static char *copy_url_part(char *url, struct http_parser_url *parts, enum http_p
 }
 
 static struct option longopts[] = {
+    { "version",        no_argument,       NULL, 'v' },
+    { "help",           no_argument,       NULL, 'h' },
     { "connections",    required_argument, NULL, 'c' },
     { "duration",       required_argument, NULL, 'd' },
     { "threads",        required_argument, NULL, 't' },
@@ -701,9 +735,11 @@ static struct option longopts[] = {
     { "u_latency",      no_argument,       NULL, 'U' },
     { "batch_latency",  no_argument,       NULL, 'B' },
     { "timeout",        required_argument, NULL, 'T' },
-    { "help",           no_argument,       NULL, 'h' },
-    { "version",        no_argument,       NULL, 'v' },
     { "rate",           required_argument, NULL, 'R' },
+    { "ca_cert",        required_argument, NULL, 'A' },
+    { "cert",           required_argument, NULL, 'C' },
+    { "key",            required_argument, NULL, 'K' },
+    { "ciphers",        required_argument, NULL, 'Z' },
     { NULL,             0,                 NULL,  0  }
 };
 
@@ -720,6 +756,10 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
 
     while ((c = getopt_long(argc, argv, "t:c:d:s:H:T:R:LUBrv?", longopts, NULL)) != -1) {
         switch (c) {
+            case 'v':
+                printf("wrk %s [%s] ", VERSION, aeGetApiName());
+                printf("Copyright (C) 2012 Will Glozer\n");
+                break;
             case 't':
                 if (scan_metric(optarg, &cfg->threads)) return -1;
                 break;
@@ -738,12 +778,12 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
             case 'L':
                 cfg->latency = true;
                 break;
-            case 'B':
-                cfg->record_all_responses = false;
-                break;
             case 'U':
                 cfg->latency = true;
                 cfg->u_latency = true;
+                break;
+            case 'B':
+                cfg->record_all_responses = false;
                 break;
             case 'T':
                 if (scan_time(optarg, &cfg->timeout)) return -1;
@@ -752,9 +792,17 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
             case 'R':
                 if (scan_metric(optarg, &cfg->rate)) return -1;
                 break;
-            case 'v':
-                printf("wrk %s [%s] ", VERSION, aeGetApiName());
-                printf("Copyright (C) 2012 Will Glozer\n");
+            case 'A':
+                cfg->ca = optarg;
+                break;
+            case 'C':
+                cfg->cert = optarg;
+                break;
+            case 'K':
+                cfg->key = optarg;
+                break;
+            case 'z':
+                cfg->ciphers = optarg;
                 break;
             case 'h':
             case '?':
@@ -777,9 +825,10 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
     }
 
     if (cfg->rate == 0) {
+        cfg->rate = 1000;
         fprintf(stderr,
-                "Throughput MUST be specified with the --rate or -R option\n");
-        return -1;
+                "Throughput is not specified with the --rate or -R option."
+                " Assuming value of: %llu.\n", (unsigned long long int)cfg->rate);
     }
 
     *url    = argv[optind];
@@ -829,16 +878,4 @@ static void print_hdr_latency(struct hdr_histogram* histogram, const char* descr
     }
     printf("\n%s\n", "  Detailed Percentile spectrum:");
     hdr_percentiles_print(histogram, stdout, 5, 1000.0, CLASSIC);
-}
-
-static void print_stats_latency(stats *stats) {
-    long double percentiles[] = { 50.0, 75.0, 90.0, 99.0, 99.9, 99.99, 99.999, 100.0 };
-    printf("  Latency Distribution\n");
-    for (size_t i = 0; i < sizeof(percentiles) / sizeof(long double); i++) {
-        long double p = percentiles[i];
-        uint64_t n = stats_percentile(stats, p);
-        printf("%7.3Lf%%", p);
-        print_units(n, format_time_us, 10);
-        printf("\n");
-    }
 }

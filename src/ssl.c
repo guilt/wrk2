@@ -1,16 +1,11 @@
 // Copyright (C) 2013 - Will Glozer.  All rights reserved.
 
 #include <pthread.h>
-
-#include <openssl/evp.h>
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-
 #include "ssl.h"
 
 static pthread_mutex_t *locks;
 
-static void ssl_lock(int mode, int n, const char *file, int line) {
+void ssl_lock(int mode, int n, const char *file, int line) {
     pthread_mutex_t *lock = &locks[n];
     if (mode & CRYPTO_LOCK) {
         pthread_mutex_lock(lock);
@@ -19,7 +14,7 @@ static void ssl_lock(int mode, int n, const char *file, int line) {
     }
 }
 
-static unsigned long ssl_id() {
+unsigned long ssl_id() {
     return (unsigned long) pthread_self();
 }
 
@@ -49,7 +44,37 @@ SSL_CTX *ssl_init() {
     return ctx;
 }
 
-status ssl_connect(connection *c, char *host) {
+status ssl_set_mutual_auth(SSL_CTX *ctx, const char *ca, const char *cert, const char *key) {
+    if (ca) {
+        if (SSL_CTX_load_verify_locations(ctx, ca, NULL) < 1) {
+            return ERROR;
+        }
+        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
+    }
+    if (cert) {
+        if (SSL_CTX_use_certificate_file(ctx, cert, SSL_FILETYPE_PEM) <= 0) {
+            return ERROR;
+        }
+    }
+    if (key) {
+        if (SSL_CTX_use_PrivateKey_file(ctx, key, SSL_FILETYPE_PEM) <= 0) {
+            return ERROR;
+        }
+        if (SSL_CTX_check_private_key(ctx) == 0) {
+            return ERROR;
+        }
+    }
+    return OK;
+}
+
+status ssl_set_cipher_list(SSL_CTX *ctx, const char *ciphers) {
+    if (SSL_CTX_set_cipher_list(ctx, ciphers) == 0) {
+        return ERROR;
+    }
+    return OK;
+}
+
+status ssl_connect(connection *c, const char *host) {
     int r;
     SSL_set_fd(c->ssl, c->fd);
     SSL_set_tlsext_host_name(c->ssl, host);
@@ -82,7 +107,7 @@ status ssl_read(connection *c, size_t *n) {
     return OK;
 }
 
-status ssl_write(connection *c, char *buf, size_t len, size_t *n) {
+status ssl_write(connection *c, const char *buf, size_t len, size_t *n) {
     int r;
     if ((r = SSL_write(c->ssl, buf, len)) <= 0) {
         switch (SSL_get_error(c->ssl, r)) {
