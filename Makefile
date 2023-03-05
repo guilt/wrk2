@@ -27,6 +27,40 @@ else ifeq ($(TARGET), freebsd)
 	LDFLAGS += -Wl,-E
 endif
 
+LDIR     := deps/luajit/src
+SDIR     := deps/openssl
+
+LDIRFLAGS  := BUILDMODE=static
+SDIRLAUNCH :=
+SDIRFLAGS  := 
+
+# Please do not enable static linking because
+# OpenSSL seems to cause issues. This should probably
+# get built and tested with MUSL for Linux.
+#
+# We localize these flags so that they are
+# not passed into dependent projects.
+
+ifeq ($(BITS), 32)
+	CFLAGS     += -m32 -rdynamic
+	LDFLAGS    += -m32 -rdynamic
+	# Lua uses this instead of $(LIBS)
+	LDFLAGS    += -lm
+ifeq ($(TARGET), linux)
+	SDIRLAUNCH := setarch linux32
+endif
+	SDIRFLAGS  := -m32
+endif
+
+ifeq ($(DEBUG), true)
+	LOCCFLAGS  += -O0 -g3
+	LOCLDFLAGS += -g3
+endif
+
+LOCLIBS := $(LDIR)/libluajit.a $(SDIR)/libssl.a $(SDIR)/libcrypto.a
+CFLAGS  += -I$(LDIR) -I$(SDIR)/include/
+LDFLAGS += -L$(LDIR) -L$(SDIR)
+
 SRC  := wrk.c \
 	net.c \
 	ssl.c \
@@ -39,32 +73,10 @@ SRC  := wrk.c \
 	http_parser.c \
 	tinymt64.c \
 	hdr_histogram.c
-BIN  := wrk2
 
 ODIR := obj
 OBJ  := $(patsubst %.c,$(ODIR)/%.o,$(SRC)) $(ODIR)/bytecode.o
-
-LDIR     = deps/luajit/src
-SDIR     = deps/openssl
-
-LDIRFLAGS= BUILDMODE=static
-SDIRFLAGS= 
-
-# Please do not enable static linking because
-# OpenSSL seems to cause issues. This should probably
-# get built and tested with MUSL for Linux.
-#
-# We localize these flags so that they are
-# not passed into dependent projects.
-
-ifeq ($(DEBUG), true)
-	LOCCFLAGS  += -O0 -g3
-	LOCLDFLAGS += -g3
-endif
-
-LOCLIBS := $(LDIR)/libluajit.a $(SDIR)/libssl.a $(SDIR)/libcrypto.a
-CFLAGS  += -I$(LDIR) -I$(SDIR)/include/
-LDFLAGS += -L$(LDIR) -L$(SDIR)
+BIN  := wrk2
 
 all: depends $(BIN)
 
@@ -103,7 +115,7 @@ $(LDIR)/luajit: $(LDIR)/libluajit.a
 
 $(SDIR)/libcrypto.a: $(SDIR)
 	@echo Building OpenSSL...
-	@[ -f "$@" ] || { cd $(SDIR) && ./config $(SDIRFLAGS) && $(MAKE) ; }
+	@[ -f "$@" ] || { cd $(SDIR) && $(SDIRLAUNCH) ./config $(SDIRFLAGS) && $(MAKE) ; }
 
 $(SDIR)/libssl.a: $(SDIR)/libcrypto.a
 

@@ -7,7 +7,7 @@
 #include "stats.h"
 
 // Max recordable latency of 1 day
-#define MAX_LATENCY 24L * 60 * 60 * 1000000
+#define MAX_LATENCY 24LL * 60 * 60 * 1000000
 
 static struct config {
     uint64_t threads;
@@ -388,7 +388,7 @@ static int calibrate(aeEventLoop *loop, long long id, void *data) {
     thread->interval = interval;
     thread->requests = 0;
 
-    printf("  Thread calibration: mean lat.: %.3fms, rate sampling interval: %dms\n",
+    printf("  Thread Calibration: Mean latency: %.3fms, Rate Sampling Interval: %dms\n",
             (thread->mean)/1000.0,
             thread->interval);
 
@@ -868,14 +868,15 @@ static void print_stats(char *name, stats *stats, char *(*fmt)(long double)) {
 
 static void print_hdr_latency(struct hdr_histogram* histogram, const char* description) {
     long double percentiles[] = { 50.0, 75.0, 90.0, 99.0, 99.9, 99.99, 99.999, 100.0};
-    printf("  Latency Distribution (HdrHistogram - %s)\n", description);
+    printf("\n  Latency Distribution (HdrHistogram - %s)\n", description);
+    printf("\n  Percentile  Value\n");
     for (size_t i = 0; i < sizeof(percentiles) / sizeof(long double); i++) {
+        printf("\n");
         long double p = percentiles[i];
         int64_t n = hdr_value_at_percentile(histogram, p);
-        printf("%7.3Lf%%", p);
+        printf("%9.3Lf%%", p);
         print_units(n, format_time_us, 10);
-        printf("\n");
     }
-    printf("\n%s\n", "  Detailed Percentile spectrum:");
+    printf("\n\n%s\n", "  Detailed Percentile Spectrum:\n");
     hdr_percentiles_print(histogram, stdout, 5, 1000.0, CLASSIC);
 }

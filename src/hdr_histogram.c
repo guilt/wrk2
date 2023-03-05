@@ -566,13 +566,13 @@ static void format_line_string(char* str, int len, int significant_figures, form
     switch (format)
     {
         case CSV:
-            snprintf(str, len, format_str, "%.", significant_figures, "f,%f,%d,%.2f\n");
+            snprintf(str, len, format_str,  "%.", significant_figures, "f, %f, %lld, %.2f\n");
             break;
         case CLASSIC:
-            snprintf(str, len, format_str, "%12.", significant_figures, "f %12f %12d %12.2f\n");
+            snprintf(str, len, format_str, "%9.", significant_figures, "f %9f %9lld %9.2f\n");
             break;
         default:
-            snprintf(str, len, format_str, "%12.", significant_figures, "f %12f %12d %12.2f\n");
+            snprintf(str, len, format_str, "%9.", significant_figures, "f %9f %9lld %9.2f\n");
     }
 }
 
@@ -581,25 +581,27 @@ static const char* format_head_string(format_type format)
     switch (format)
     {
         case CSV:
-            return "%s,%s,%s,%s\n";
+            return "%s, %s, %s, %s\n";
         case CLASSIC:
-            return "%12s %12s %12s %12s\n\n";
+            return "%9s %9s %9s %9s\n\n";
         default:
-            return "%12s %12s %12s %12s\n\n";
+            return "%9s %9s %9s %9s\n\n";
     }
 }
 
 static const char CLASSIC_FOOTER[] =
-    "#[Mean    = %12.3f, StdDeviation   = %12.3f]\n"
-    "#[Max     = %12.3f, Total count    = %12" PRIu64 "]\n"
-    "#[Buckets = %12d, SubBuckets     = %12d]\n";
+    "\n"
+    "#[Mean    = %9.3f, StdDeviation   = %9.3f]\n"
+    "#[Max     = %9.3f, Total count    = %9" PRIu64 "]\n"
+    "#[Buckets = %9d, SubBuckets     = %9d]\n";
 
 int hdr_percentiles_print(
     struct hdr_histogram* h, FILE* stream, int32_t ticks_per_half_distance,
     double value_scale, format_type format)
 {
-    char line_format[25];
-    format_line_string(line_format, 25, h->significant_figures, format);
+    char line_format[40];
+    memset(line_format, 0, 40);
+    format_line_string(line_format, 39, h->significant_figures, format);
     const char* head_format = format_head_string(format);
     int rc = 0;
 
@@ -608,7 +610,7 @@ int hdr_percentiles_print(
 
     if (fprintf(
         stream, head_format,
-        "Value", "Percentile", "TotalCount", "1/(1-Percentile)") < 0)
+        "Value", "Percentile", "TotCount", "1/(1-Percentile)") < 0)
     {
         rc = EIO;
         goto cleanup;
@@ -616,10 +618,10 @@ int hdr_percentiles_print(
 
     while (hdr_percentile_iter_next(&percentiles))
     {
-        double  value               = percentiles.iter.highest_equivalent_value / value_scale;
-        double  percentile          = percentiles.percentile / 100.0;
-        int64_t total_count         = percentiles.iter.count_to_index;
-        double  inverted_percentile = (1.0 / (1.0 - percentile));
+        float  value               = (float) percentiles.iter.highest_equivalent_value / value_scale;
+        float  percentile          = (float) (percentiles.percentile / 100.0);
+        int64_t total_count        = percentiles.iter.count_to_index;
+        float  inverted_percentile = (1.0f / (1.0f - percentile));
 
         if (fprintf(
             stream, line_format, value, percentile, total_count, inverted_percentile) < 0)
@@ -631,9 +633,9 @@ int hdr_percentiles_print(
 
     if (CLASSIC == format)
     {
-        double mean   = hdr_mean(h)   / value_scale;
-        double stddev = hdr_stddev(h) / value_scale;
-        double max    = hdr_max(h)    / value_scale;
+        float mean   = (float) (hdr_mean(h)   / value_scale);
+        float stddev = (float) (hdr_stddev(h) / value_scale);
+        float max    = (float) (hdr_max(h)    / value_scale);
 
         if (fprintf(
             stream, CLASSIC_FOOTER,  mean, stddev, max,
